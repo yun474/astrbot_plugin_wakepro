@@ -3,7 +3,7 @@ import time
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.message.components import At, Plain
+from astrbot.core.message.components import Plain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
@@ -17,7 +17,7 @@ from .core.model import (
     WakeContext,
 )
 from .core.pipeline import Pipeline
-from .core.utils import get_ats
+from .core.utils import get_target_ids, parse_user_id
 
 
 class WakePlugin(Star):
@@ -190,13 +190,20 @@ class WakePlugin(Star):
     async def llm_set_wake_block(
         self, event: AstrMessageEvent, user_id: str, blocked: bool
     ) -> str:
-        """屏蔽或解除屏蔽指定用户，屏蔽时用户的消息将被屏蔽，不会被回复。
+        """屏蔽或解除屏蔽指定用户，屏蔽时用户的消息将被屏蔽，不会被回复。仅管理员发起时可用。
         Args:
             user_id(string): 要操作的用户 ID，例如 QQ 号。
             blocked(boolean): true 表示屏蔽该用户（默认为true），false 表示解除屏蔽。
         """
-        uid = user_id.strip().removeprefix("@").strip()
+        # 只接受管理员发起的操作，避免普通成员借助 LLM 屏蔽他人
+        if not event.is_admin():
+            return "只有管理员可以屏蔽或解除屏蔽用户"
+        uid = parse_user_id(user_id)
+        if not uid:
+            return f"无法识别的用户 ID：{user_id}"
         if blocked:
+            if uid in self._get_admin_ids(event):
+                return f"不能屏蔽管理员：{uid}"
             if self.cfg.add_block_user(uid):
                 return f"已屏蔽用户：{uid}"
             return f"用户屏蔽中：{uid}"
@@ -204,10 +211,18 @@ class WakePlugin(Star):
             return f"已解除屏蔽：{uid}"
         return f"用户未被屏蔽：{uid}"
 
+    def _get_admin_ids(self, event: AstrMessageEvent) -> set[str]:
+        """读取当前会话所用配置文件中的管理员 ID"""
+        admins = self.context.get_config(umo=event.unified_msg_origin).get(
+            "admins_id", []
+        )
+        return {str(admin_id) for admin_id in admins}
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("屏蔽用户", alias={"屏蔽唤醒"})
     async def cmd_block_wake(self, event: AstrMessageEvent, target_id: str = ""):
-        """屏蔽用户 @用户A @用户B 或QQ号"""
-        uids = get_ats(event)
+        """屏蔽用户 @用户A @用户B 或用户ID（仅管理员）"""
+        uids = get_target_ids(event)
         if not uids:
             blocked_users = self.cfg.block.block_users
             msg = (
@@ -217,31 +232,22 @@ class WakePlugin(Star):
             )
             yield event.plain_result(msg)
             return
+        admin_ids = self._get_admin_ids(event)
         results = []
         for uid in uids:
-            if self.cfg.add_block_user(uid):
+            if uid in admin_ids:
+                results.append(f"不能屏蔽管理员：{uid}")
+            elif self.cfg.add_block_user(uid):
                 results.append(f"已屏蔽用户：{uid}")
             else:
                 results.append(f"用户屏蔽中：{uid}")
         yield event.plain_result("\n".join(results))
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("解除屏蔽")
     async def cmd_allow_wake(self, event: AstrMessageEvent, target_id: str = ""):
-        """解除屏蔽 @用户A @用户B 或QQ号"""
-        uids = list(
-            dict.fromkeys(
-                str(seg.qq).strip()
-                for seg in event.get_messages()
-                if (
-                    isinstance(seg, At)
-                    and seg.qq
-                    and str(seg.qq).strip() not in ("", "all", str(event.get_self_id()))
-                )
-            )
-        )
-        uid = target_id.strip().removeprefix("@").strip()
-        if not uids and uid and uid not in ("all", str(event.get_self_id())):
-            uids.append(uid)
+        """解除屏蔽 @用户A @用户B 或用户ID（仅管理员）"""
+        uids = get_target_ids(event)
         if not uids:
             blocked_users = self.cfg.block.block_users
             yield event.plain_result(

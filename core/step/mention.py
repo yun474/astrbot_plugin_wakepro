@@ -2,6 +2,7 @@ from astrbot.core.message.components import At, Reply
 
 from ..config import PluginConfig
 from ..model import StepName, StepResult, WakeContext, WakeType
+from ..utils import has_prefix
 from .base import BaseStep
 
 
@@ -65,10 +66,7 @@ class MentionStep(BaseStep):
             or WakeType.PREFIX in ctx.wake_types
             or (
                 ctx.event.is_at_or_wake_command
-                and any(
-                    prefix and ctx.plain.startswith(prefix)
-                    for prefix in self.config.wake_prefix
-                )
+                and has_prefix(ctx, self.config.get_wake_prefix(ctx.umo))
             )
         ):
             return StepResult()

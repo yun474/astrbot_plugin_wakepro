@@ -1,8 +1,16 @@
+import re
+from collections.abc import Iterable
+
 from astrbot.core.message.components import At
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star_handler import star_handlers_registry
+
+from .model import WakeContext
+
+# 指令参数中可识别为用户 ID 的写法：123456、@123456、<@openid>
+_TARGET_ID_PATTERN = re.compile(r"^(?:<@!?([A-Za-z0-9_-]+)>|@?([A-Za-z0-9_-]+))$")
 
 # 机器人账号区间（闭区间）
 BOT_RANGES: list[tuple[int, int]] = [
@@ -46,30 +54,35 @@ def get_all_commands() -> list[str]:
     return commands
 
 
-def get_ats(
-    event: AstrMessageEvent,
-    noself: bool = True,
-    block_ids: list[str] | None = None,
-    skip_first_seg: bool = True,
-):
+def parse_user_id(text: str) -> str | None:
+    """解析单个用户 ID 写法：123456、@123456、<@openid>，无法识别时返回 None"""
+    match = _TARGET_ID_PATTERN.match(text.strip())
+    return (match.group(1) or match.group(2)) if match else None
+
+
+def get_target_ids(event: AstrMessageEvent) -> list[str]:
     """
-    获取被at者们的id列表(@增强版)
-    Args:
-        event: 消息事件对象
-        noself: 是否排除自己
-        block_ids: 要排除的id列表
-        skip_first_seg: 是否跳过第一个消息段（默认为True）
+    提取指令要操作的用户 ID 列表（去重、保持顺序）
+    支持艾特、@123456、<@openid> 以及直接输入的 ID，排除 Bot 自身和全体成员
     """
-    segs = event.get_messages()
-    segs = segs[1:] if skip_first_seg else segs
-    ats = {str(seg.qq) for seg in segs if isinstance(seg, At)}
-    ats.update(
-        arg[1:]
-        for arg in event.message_str.split()
-        if arg.startswith("@") and arg[1:].isdigit()
-    )
-    if noself:
-        ats.discard(event.get_self_id())
-    if block_ids:
-        ats.difference_update(block_ids)
-    return list(ats)
+    excluded = {"", "all", str(event.get_self_id())}
+    ids = [str(seg.qq) for seg in event.get_messages() if isinstance(seg, At)]
+    # 第一个词是指令名，其余为参数
+    for token in event.message_str.split()[1:]:
+        uid = parse_user_id(token)
+        if uid:
+            ids.append(uid)
+    return [uid for uid in dict.fromkeys(ids) if uid not in excluded]
+
+
+def has_prefix(ctx: WakeContext, prefixes: Iterable[str]) -> bool:
+    """
+    按 AstrBot 的规则判断消息是否以前缀开头：比对整条消息的文本，
+    不受开头引用、艾特 Bot 等消息段影响；群聊中首段为艾特他人时不算前缀消息
+    """
+    if not ctx.plain:
+        return False
+    first = ctx.chain[0] if ctx.chain else None
+    if ctx.gid and isinstance(first, At) and str(first.qq) not in (str(ctx.bid), "all"):
+        return False
+    return any(p and ctx.plain.startswith(p) for p in prefixes)

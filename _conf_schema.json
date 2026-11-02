@@ -177,6 +177,12 @@
                 "hint": "开启后，即使用户使用前缀，也无法唤醒llm，但指令不受影响",
                 "type": "bool",
                 "default": false
+            },
+            "block_llm_prefixes": {
+                "description": "前缀拦截列表",
+                "hint": "开启“禁止使用前缀唤醒LLM”时生效。填写后只拦截以这些前缀开头的非指令消息，不再读取 AstrBot 的唤醒前缀；留空时使用当前会话所用配置文件的唤醒前缀。",
+                "type": "list",
+                "default": []
             }
         }
     },

@@ -1,5 +1,6 @@
 from ..config import PluginConfig
 from ..model import StepName, StepResult, WakeContext, WakeType
+from ..utils import has_prefix
 from .base import BaseStep
 
 
@@ -29,9 +30,8 @@ class ProlongStep(BaseStep):
         ):
             return StepResult()
         # Core prefix wakes still count when command filtering is skipped.
-        if ctx.event.is_at_or_wake_command and any(
-            prefix and ctx.plain.startswith(prefix)
-            for prefix in self.config.wake_prefix
+        if ctx.event.is_at_or_wake_command and has_prefix(
+            ctx, self.config.get_wake_prefix(ctx.umo)
         ):
             ctx.wake_types.add(WakeType.PREFIX)
         if ctx.wake_types & self.cfg._activation_types:

@@ -144,6 +144,7 @@ class CommandConfig(ConfigNode):
     block_builtin: bool
     block_prefix_cmd: bool
     block_prefix_llm: bool
+    block_llm_prefixes: list[str]
 
 
 class MentionConfig(ConfigNode):
@@ -226,12 +227,21 @@ class PluginConfig(ConfigNode):
     def __init__(self, config: AstrBotConfig, context: Context):
         super().__init__(config)
         self.context = context
-        self.wake_prefix: list[str] = self.context.get_config().get("wake_prefix", [])
         self.admins_id: list[str] = context.get_config().get("admins_id", [])
         self.plugin_dir = Path(get_astrbot_plugin_path()) / self._plugin_name
         self.block_words_file = self.plugin_dir / "block_words.json"
         self._normalize_whitelist()
         self._normalize_block_words()
+
+    def get_wake_prefix(self, umo: str) -> list[str]:
+        """读取会话所用配置文件的唤醒前缀，不同会话可能绑定不同的配置文件"""
+        prefixes = self.context.get_config(umo=umo).get("wake_prefix", [])
+        return [p for p in prefixes if p]
+
+    def get_llm_block_prefixes(self, umo: str) -> list[str]:
+        """前缀拦截列表非空时只用该列表，否则回退到会话的唤醒前缀"""
+        custom = [p for p in self.command.block_llm_prefixes if p]
+        return custom or self.get_wake_prefix(umo)
 
     def _normalize_whitelist(self):
         if not self.admins_id:

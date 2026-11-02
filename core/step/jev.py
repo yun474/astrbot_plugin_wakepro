@@ -64,7 +64,10 @@ class JevStep(BaseStep):
         history = [
             item for item in ctx.group.history if item.get("message_id") != message_id
         ][-history_messages:]
-        names = [*self.config.wake_prefix, *self.config.mention.names]
+        names = [
+            *self.config.get_wake_prefix(ctx.umo),
+            *self.config.mention.names,
+        ]
         names.extend(self.config.mention.admin_names)
         try:
             probability = await self.client.judge(
