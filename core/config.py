@@ -96,6 +96,7 @@ class PipelineConfig(ConfigNode):
     whitelist_steps: list[str]
     blacklist: list[str]
     blacklist_steps: list[str]
+    admin_config: str
 
     def __init__(self, data: MutableMapping[str, Any]):
         super().__init__(data)
@@ -227,11 +228,39 @@ class PluginConfig(ConfigNode):
     def __init__(self, config: AstrBotConfig, context: Context):
         super().__init__(config)
         self.context = context
-        self.admins_id: list[str] = context.get_config().get("admins_id", [])
+        self._fill_admin_config_options(getattr(config, "schema", None))
+        self.admins_id: list[str] = self._load_admin_ids()
         self.plugin_dir = Path(get_astrbot_plugin_path()) / self._plugin_name
         self.block_words_file = self.plugin_dir / "block_words.json"
         self._normalize_whitelist()
         self._normalize_block_words()
+
+    def _fill_admin_config_options(self, schema: dict | None) -> None:
+        """把当前所有 AstrBot 配置文件填入「管理员来源配置文件」的下拉选项"""
+        item = (schema or {}).get("pipeline", {}).get("items", {}).get("admin_config")
+        if item is None:
+            return
+        confs = sorted(
+            self.context.astrbot_config_mgr.get_conf_list(),
+            key=lambda c: c["id"] != "default",
+        )
+        item["options"] = [c["id"] for c in confs] + [""]
+        item["labels"] = [
+            "默认配置（default）" if c["id"] == "default" else c["name"] for c in confs
+        ] + ["不同步"]
+
+    def _load_admin_ids(self) -> list[str]:
+        """读取所选配置文件中的管理员 ID，未选择或配置文件不存在时返回空列表"""
+        conf_id = self.pipeline.admin_config
+        if not conf_id:
+            return []
+        conf = self.context.astrbot_config_mgr.confs.get(conf_id)
+        if conf is None:
+            logger.warning(
+                f"管理员来源配置文件不存在：{conf_id}，已跳过管理员白名单同步"
+            )
+            return []
+        return [str(admin_id) for admin_id in conf.get("admins_id", [])]
 
     def get_wake_prefix(self, umo: str) -> list[str]:
         """读取会话所用配置文件的唤醒前缀，不同会话可能绑定不同的配置文件"""

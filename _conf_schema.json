@@ -31,9 +31,23 @@
             },
             "whitelist": {
                 "description": "白名单",
-                "hint": "支持直接填写会话ID、群聊ID、用户ID(如果冲突，请填写完整会话ID)。AstrBot 管理员会自动加入这里",
+                "hint": "支持直接填写会话ID、群聊ID、用户ID(如果冲突，请填写完整会话ID)。“管理员来源配置文件”中的 AstrBot 管理员会自动加入这里",
                 "type": "list",
                 "default": []
+            },
+            "admin_config": {
+                "description": "管理员来源配置文件",
+                "hint": "插件加载时，把所选 AstrBot 配置文件中的管理员自动加入白名单（只添加不删除）。选择“不同步”则不自动添加。下拉列表在插件加载时刷新，新建配置文件后需重载本插件才会出现；所选配置文件被删除后将停止同步。",
+                "type": "string",
+                "options": [
+                    "default",
+                    ""
+                ],
+                "labels": [
+                    "默认配置（default）",
+                    "不同步"
+                ],
+                "default": "default"
             },
             "whitelist_steps": {
                 "description": "白名单作用的步骤",

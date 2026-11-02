@@ -1,5 +1,7 @@
+import sys
 import time
 
+from astrbot.api import logger
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -14,6 +16,7 @@ from .core.config import PluginConfig
 from .core.model import (
     MemberState,
     StateManager,
+    StepName,
     WakeContext,
 )
 from .core.pipeline import Pipeline
@@ -73,6 +76,33 @@ class WakePlugin(Star):
         # Registry cleanup can happen after this hook; the size check below
         # also invalidates any cache rebuilt while unloading is still in progress.
         self._commands = None
+
+    @filter.event_message_type(filter.EventMessageType.ALL, priority=sys.maxsize)
+    async def block_prefix_only_msg(self, event: AstrMessageEvent):
+        """拦截只含拦截前缀的消息。
+
+        AstrBot 内置的空唤醒处理（优先级 maxsize - 1）会把这类消息当作空艾特，
+        直接请求 LLM 并监听该会话的下一条消息，因此需要抢在它之前停止事件。
+        """
+        if not self.cfg.command.block_prefix_llm or not event.is_at_or_wake_command:
+            return
+        chain = event.get_messages()
+        if len(chain) != 1 or not isinstance(chain[0], Plain):
+            return
+        umo = event.unified_msg_origin
+        if chain[0].text.strip() not in self.cfg.get_llm_block_prefixes(umo):
+            return
+        # 与指令屏蔽步骤保持一致：步骤未启用或命中白名单/黑名单时不处理
+        pipeline = self.cfg.pipeline
+        targets = (umo, event.get_sender_id(), event.get_group_id())
+        if (
+            not pipeline.is_enabled_step(StepName.COMMAND)
+            or pipeline.in_whitelist(StepName.COMMAND, *targets)
+            or pipeline.in_blacklist(StepName.COMMAND, *targets)
+        ):
+            return
+        logger.debug(f"仅含拦截前缀的消息，已停止事件：{umo}")
+        event.stop_event()
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=99999)
     async def on_group_msg(self, event: AstrMessageEvent):
