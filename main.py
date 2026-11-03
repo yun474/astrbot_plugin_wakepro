@@ -92,13 +92,13 @@ class WakePlugin(Star):
         umo = event.unified_msg_origin
         if chain[0].text.strip() not in self.cfg.get_llm_block_prefixes(umo):
             return
-        # 与指令屏蔽步骤保持一致：步骤未启用或命中白名单/黑名单时不处理
+        # 与前缀拦截步骤保持一致：步骤未启用或命中白名单/黑名单时不处理
         pipeline = self.cfg.pipeline
         targets = (umo, event.get_sender_id(), event.get_group_id())
         if (
-            not pipeline.is_enabled_step(StepName.COMMAND)
-            or pipeline.in_whitelist(StepName.COMMAND, *targets)
-            or pipeline.in_blacklist(StepName.COMMAND, *targets)
+            not pipeline.is_enabled_step(StepName.PREFIX)
+            or pipeline.in_whitelist(StepName.PREFIX, *targets)
+            or pipeline.in_blacklist(StepName.PREFIX, *targets)
         ):
             return
         logger.debug(f"仅含拦截前缀的消息，已停止事件：{umo}")

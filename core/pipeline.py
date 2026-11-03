@@ -11,6 +11,7 @@ from .step import (
     DebounceStep,
     JevStep,
     MentionStep,
+    PrefixStep,
     ProlongStep,
     SilenceStep,
     WakeStep,
@@ -28,6 +29,7 @@ class Pipeline:
 
     STEP_REGISTRY: list[type[BaseStep]] = [
         BlockStep,
+        PrefixStep,
         CommandStep,
         DebounceStep,
         MentionStep,

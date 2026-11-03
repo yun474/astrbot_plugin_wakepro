@@ -248,6 +248,7 @@ class WakeContext:
 
 class StepName(str, Enum):
     BLOCK = "block"
+    PREFIX = "prefix"
     COMMAND = "command"
     DEBOUNCE = "debounce"
     MENTION = "mention"
